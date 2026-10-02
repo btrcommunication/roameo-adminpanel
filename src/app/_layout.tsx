@@ -189,6 +189,15 @@ export default function AppTabs() {
         }}
       />
       <Tabs.Screen
+        name="revenue"
+        options={{
+          title: 'Revenue',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="wallet-outline" size={size ?? 22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           href: null,
