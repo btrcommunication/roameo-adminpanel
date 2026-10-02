@@ -184,18 +184,54 @@ export default function HomeScreen() {
           </View>
           <Text style={styles.chartNote}>{data.orders ? 'Share of orders by category' : 'Category names are live. Order shares are unavailable.'}</Text>
         </View>
-        <View style={styles.sectionHeader}><Text style={styles.cardTitle}>Recent Bookings</Text><TouchableOpacity accessibilityRole="button" onPress={() => router.push('/orders')}><Text style={styles.viewAllText}>View All</Text></TouchableOpacity></View>
+        <View style={styles.sectionHeader}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.cardTitle}>Recent Sales</Text>
+            {summary.recent.length > 0 && (
+              <View style={{ backgroundColor: '#FFF0EA', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 }}>
+                <Text style={{ fontSize: 11, color: COLORS.primary, fontWeight: '700' }}>{summary.recent.length}</Text>
+              </View>
+            )}
+          </View>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/orders')}>
+            <Text style={styles.viewAllText}>View All</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.recentList}>
-          {data.orders === null ? <Text style={styles.empty}>{loading ? 'Loading orders…' : 'Order data is currently unavailable.'}</Text> : summary.recent.length === 0 ? <Text style={styles.empty}>No orders yet.</Text> : summary.recent.map(order => <TouchableOpacity accessibilityRole="button" key={order.id} style={styles.recentCard} onPress={() => router.push('/orders')}>
-            <View style={styles.recentLeft}>
-              <View style={styles.recentAvatar}><Ionicons name="calendar-outline" size={18} color="#A855F7" /></View>
-              <View style={styles.flex}><Text numberOfLines={1} style={styles.recentTitle}>{order.title || 'Order #' + order.id}</Text><Text style={styles.recentDate}>{Number.isNaN(Date.parse(order.created_at)) ? 'Date unavailable' : new Date(order.created_at).toLocaleString()}</Text></View>
-            </View>
-            <View style={styles.bookingRight}>
-              <Text style={styles.bookingAmount}>{formatAmount(order.total, order.currency)}</Text>
-              <View style={[styles.badgePill, { backgroundColor: ['paid', 'completed', 'confirmed'].includes(order.status) ? '#DEF7EC' : '#FEF3C7' }]}><Text style={[styles.badgePillText, { color: '#374151' }]}>{order.status}</Text></View>
-            </View>
-          </TouchableOpacity>)}
+          {data.orders === null ? (
+            <Text style={styles.empty}>{loading ? 'Loading sales…' : 'Sales data is currently unavailable.'}</Text>
+          ) : summary.recent.length === 0 ? (
+            <Text style={styles.empty}>No sales yet.</Text>
+          ) : summary.recent.map(order => {
+            const isPaid = ['paid', 'completed', 'confirmed'].includes((order.status || '').toLowerCase());
+            const isPlaced = (order.status || '').toLowerCase() === 'placed';
+            const statusBg = isPaid ? '#DEF7EC' : isPlaced ? '#FEF3C7' : '#FEE2E2';
+            const statusColor = isPaid ? '#065F46' : isPlaced ? '#92400E' : '#991B1B';
+            const customerLabel = order.customer || order.customer_email || `Order #${order.id}`;
+            const itemCount = order.total_items || order.items?.length || 0;
+            return (
+              <TouchableOpacity accessibilityRole="button" key={order.id} style={styles.recentCard} onPress={() => router.push('/orders')}>
+                <View style={styles.recentLeft}>
+                  <View style={[styles.recentAvatar, { backgroundColor: '#FFF0EA' }]}>
+                    <Ionicons name="cart-outline" size={18} color={COLORS.primary} />
+                  </View>
+                  <View style={styles.flex}>
+                    <Text numberOfLines={1} style={styles.recentTitle}>{customerLabel}</Text>
+                    <Text style={styles.recentDate}>
+                      {itemCount > 0 ? `${itemCount} item${itemCount !== 1 ? 's' : ''} · ` : ''}
+                      {Number.isNaN(Date.parse(order.created_at)) ? 'Date unavailable' : new Date(order.created_at).toLocaleString()}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.bookingRight}>
+                  <Text style={styles.bookingAmount}>${formatAmount(order.total, order.currency)}</Text>
+                  <View style={[styles.badgePill, { backgroundColor: statusBg }]}>
+                    <Text style={[styles.badgePillText, { color: statusColor }]}>{order.status}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </ScrollView>
       <Modal visible={profileOpen} transparent animationType="fade" onRequestClose={() => setProfileOpen(false)}>

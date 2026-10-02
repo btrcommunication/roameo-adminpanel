@@ -81,7 +81,7 @@ export default function CouponApprovalScreen() {
     const [filteredCoupons, setFilteredCoupons] = useState<Coupon[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
-    const [selectedTab, setSelectedTab] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('Pending');
+    const [selectedTab, setSelectedTab] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
     const [stats, setStats] = useState({
         total: 0,
         active: 0,
@@ -340,22 +340,10 @@ export default function CouponApprovalScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor={COLORS.darkBg} />
-
-            {/* HEADER */}
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Roameo Admin</Text>
-                <View style={styles.badgeHeader}>
-                    <Ionicons name="pricetag" size={14} color={COLORS.primary} />
-                    <Text style={styles.badgeHeaderText}>Coupon Control</Text>
-                </View>
-            </View>
-
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                 
                 {/* TITLE */}
                 <View style={styles.titleRow}>
-                    <Text style={styles.breadcrumb}>Promotions &gt; Coupon Approvals</Text>
-                    <Text style={styles.pageTitle}>Coupon Approvals</Text>
                     <View style={styles.totalBadge}>
                         <Ionicons name="ticket-outline" size={12} color={COLORS.primary} />
                         <Text style={styles.totalBadgeText}>
@@ -434,7 +422,7 @@ export default function CouponApprovalScreen() {
                     </View>
 
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        {['Pending', 'All', 'Approved', 'Rejected'].map((tab) => (
+                        {['All', 'Pending', 'Approved', 'Rejected'].map((tab) => (
                             <TouchableOpacity
                                 key={tab}
                                 onPress={() => handleTabChange(tab as any)}
@@ -497,50 +485,36 @@ export default function CouponApprovalScreen() {
 
                                 return (
                                     <View key={item.id} style={styles.couponTicketCard}>
-                                        {/* Banner Image */}
-                                        <View style={styles.bannerWrapper}>
-                                            {item.banner_image ? (
+                                        {/* Banner Image - only shown when URL exists */}
+                                        {!!item.banner_image && (
+                                            <View style={styles.bannerWrapper}>
                                                 <Image
                                                     source={{ uri: item.banner_image }}
                                                     style={styles.bannerImage}
                                                     resizeMode="cover"
                                                 />
-                                            ) : (
-                                                <View style={[styles.bannerImage, styles.bannerPlaceholder]}>
-                                                    <Ionicons name="image-outline" size={32} color={COLORS.textMuted} />
-                                                    <Text style={styles.bannerPlaceholderText}>No banner image</Text>
-                                                </View>
-                                            )}
-                                            {/* Status badge overlaid on banner */}
-                                            <View
-                                                style={[
-                                                    styles.statusBadge,
-                                                    styles.statusBadgeOverlay,
-                                                    { backgroundColor: statusStyle.bg }
-                                                ]}>
-                                                <Text
-                                                    style={[
-                                                        styles.statusBadgeText,
-                                                        { color: statusStyle.text }
-                                                    ]}>
-                                                    {statusStyle.label}
-                                                </Text>
                                             </View>
-                                        </View>
+                                        )}
 
                                         {/* Coupon Top Box */}
                                         <View style={styles.ticketHeader}>
                                             <View style={styles.codeBox}>
                                                 <Ionicons name="pricetag-outline" size={14} color={COLORS.primary} />
-                                                <Text style={styles.codeText}>{item.coupon_code || 'Pending Approval'}</Text>
+                                                <Text style={styles.codeText}>{item.coupon_code || 'No Code'}</Text>
                                             </View>
-                                            {item.priority != null && (
-                                                <View style={styles.priorityBadge}>
-                                                    <Text style={styles.priorityBadgeText}>
-                                                        Priority {item.priority}
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                {/* Status badge always visible */}
+                                                <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                                                    <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>
+                                                        {statusStyle.label}
                                                     </Text>
                                                 </View>
-                                            )}
+                                                {item.priority != null && (
+                                                    <View style={styles.priorityBadge}>
+                                                        <Text style={styles.priorityBadgeText}>Priority {item.priority}</Text>
+                                                    </View>
+                                                )}
+                                            </View>
                                         </View>
 
                                         <Text style={styles.couponTitle}>{item.title || 'Untitled Coupon'}</Text>
@@ -598,52 +572,44 @@ export default function CouponApprovalScreen() {
                                             </View>
                                         )}
 
-                                        {/* Actions */}
-                                        <View style={styles.actionRow}>
-                                            <TouchableOpacity
-                                                style={[
-                                                    styles.actionBtn,
-                                                    styles.rejectBtn,
-                                                    isRejected && styles.activeRejectBtn,
-                                                ]}
-                                                onPress={() => openRejectModal(item)}
-                                                disabled={isApproved}>
-                                                <Ionicons
-                                                    name="close-circle-outline"
-                                                    size={16}
-                                                    color={isRejected ? '#FFF' : isApproved ? '#D1D5DB' : COLORS.redDanger}
-                                                />
-                                                <Text
-                                                    style={[
-                                                        styles.actionBtnText,
-                                                        { color: isRejected ? '#FFF' : isApproved ? '#D1D5DB' : COLORS.redDanger },
-                                                    ]}>
-                                                    {isRejected ? 'Edit Reason' : isApproved ? 'Reject' : 'Reject'}
-                                                </Text>
-                                            </TouchableOpacity>
+                                        {/* Actions (Only show for pending coupons) */}
+                                        {isPending && (
+                                            <View style={styles.actionRow}>
+                                                <TouchableOpacity
+                                                    style={[styles.actionBtn, styles.rejectBtn]}
+                                                    onPress={() => openRejectModal(item)}>
+                                                    <Ionicons
+                                                        name="close-circle-outline"
+                                                        size={16}
+                                                        color={COLORS.redDanger}
+                                                    />
+                                                    <Text
+                                                        style={[
+                                                            styles.actionBtnText,
+                                                            { color: COLORS.redDanger },
+                                                        ]}>
+                                                        Reject
+                                                    </Text>
+                                                </TouchableOpacity>
 
-                                            <TouchableOpacity
-                                                style={[
-                                                    styles.actionBtn,
-                                                    styles.approveBtn,
-                                                    isApproved && styles.activeApproveBtn,
-                                                ]}
-                                                onPress={() => handleApprove(item.id)}
-                                                disabled={isApproved}>
-                                                <Ionicons
-                                                    name="checkmark-circle-outline"
-                                                    size={16}
-                                                    color={isApproved ? '#FFF' : COLORS.greenSuccess}
-                                                />
-                                                <Text
-                                                    style={[
-                                                        styles.actionBtnText,
-                                                        { color: isApproved ? '#FFF' : COLORS.greenSuccess },
-                                                    ]}>
-                                                    {isApproved ? 'Approved ✓' : 'Approve'}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        </View>
+                                                <TouchableOpacity
+                                                    style={[styles.actionBtn, styles.approveBtn]}
+                                                    onPress={() => handleApprove(item.id)}>
+                                                    <Ionicons
+                                                        name="checkmark-circle-outline"
+                                                        size={16}
+                                                        color={COLORS.greenSuccess}
+                                                    />
+                                                    <Text
+                                                        style={[
+                                                            styles.actionBtnText,
+                                                            { color: COLORS.greenSuccess },
+                                                        ]}>
+                                                        Approve
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        )}
 
                                         {/* Status Message for Approved */}
                                         {isApproved && (

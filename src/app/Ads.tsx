@@ -73,6 +73,7 @@ export default function AdsManagement() {
     const [loadingVendors, setLoadingVendors] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [selectedTab, setSelectedTab] = useState('vendor');
+    const [reportsTab, setReportsTab] = useState<'vendor' | 'marketplace'>('vendor');
     const [vendorAdType, setVendorAdType] = useState('featured');
     const [modalVisible, setModalVisible] = useState(false);
     const [editingId, setEditingId] = useState(null);
@@ -84,10 +85,199 @@ export default function AdsManagement() {
     const [deleteItemId, setDeleteItemId] = useState(null);
     const [deleteItemTitle, setDeleteItemTitle] = useState('');
     const [failedImages, setFailedImages] = useState({});
+    const [previewImageError, setPreviewImageError] = useState(false);
 
     // Date picker states
     const [showStartDatePicker, setShowStartDatePicker] = useState(false);
     const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+
+    const [reportModalVisible, setReportModalVisible] = useState(false);
+    const [reportLoading, setReportLoading] = useState(false);
+    const [reportData, setReportData] = useState(null);
+
+    const [viewSection, setViewSection] = useState('ads'); // 'ads' | 'analytics'
+    const [analyticsData, setAnalyticsData] = useState(null);
+    const [analyticsLoading, setAnalyticsLoading] = useState(false);
+    const [analyticsSearch, setAnalyticsSearch] = useState('');
+    const [selectedVendorFilter, setSelectedVendorFilter] = useState('all');
+    const [showVendorDropdown, setShowVendorDropdown] = useState(false);
+
+    const fetchAnalyticsSummary = async (vendorFilter = selectedVendorFilter, tab = reportsTab) => {
+        try {
+            setAnalyticsLoading(true);
+            const params = new URLSearchParams();
+            if (tab) {
+                params.append('ad_type', tab);
+            }
+            if (tab === 'vendor' && vendorFilter && vendorFilter !== 'all') {
+                params.append('vendor_id', vendorFilter);
+            }
+            const url = `${API_BASE_URL}/vendorcreation/ads/reports/summary?${params.toString()}`;
+            const response = await fetchWithCors(url);
+            const result = await response.json();
+            if (result.status === 'success') {
+                setAnalyticsData(result.data);
+            }
+        } catch (e) {
+            console.error('Fetch analytics summary error:', e);
+        } finally {
+            setAnalyticsLoading(false);
+        }
+    };
+
+    const downloadReportPDF = (data, title = 'Ad_Analytics_Report') => {
+        if (typeof window !== 'undefined') {
+            const summary = data?.summary || {};
+            const adsList = data?.ads || [];
+            const filterLabel = selectedVendorFilter === 'all' ? 'All Vendors (Platform-Wide)' : (vendors.find(v => String(v.id) === String(selectedVendorFilter))?.business_name || `Vendor #${selectedVendorFilter}`);
+            const dateStr = new Date().toLocaleString();
+
+            const rowsHtml = adsList.map((a, i) => `
+                <tr style="background-color: ${i % 2 === 1 ? '#f9fafb' : '#ffffff'};">
+                    <td style="padding: 10px 8px; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #4b5563;">#${a.id}</td>
+                    <td style="padding: 10px 8px; border-bottom: 1px solid #e5e7eb;">
+                        <div style="font-weight: 600; color: #111827;">${a.title || 'Untitled'}</div>
+                        <div style="font-size: 11px; color: #6b7280;">${a.category_name || ''}</div>
+                    </td>
+                    <td style="padding: 10px 8px; border-bottom: 1px solid #e5e7eb; font-size: 12px; color: #374151;">
+                        ${a.ad_type === 'marketplace' ? 'Marketplace' : (a.vendor_name || `Vendor #${a.vendor_id}`)}
+                    </td>
+                    <td style="padding: 10px 8px; border-bottom: 1px solid #e5e7eb; text-align: center;">
+                        <span style="display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; background-color: ${a.campaign_type === 'notification' ? '#fee2e2' : '#eff6ff'}; color: ${a.campaign_type === 'notification' ? '#991b1b' : '#1d4ed8'};">
+                            ${a.campaign_type === 'notification' ? 'Notification' : 'Featured'}
+                        </span>
+                    </td>
+                    <td style="padding: 10px 8px; border-bottom: 1px solid #e5e7eb; font-size: 12px; color: #374151;">
+                        ${a.target_type === 'coupon' ? 'Coupons' : a.target_type === 'category' ? 'Category' : 'Store / Global'}
+                    </td>
+                    <td style="padding: 10px 8px; border-bottom: 1px solid #e5e7eb; text-align: center; font-weight: 600;">${a.total_impressions || 0}</td>
+                    <td style="padding: 10px 8px; border-bottom: 1px solid #e5e7eb; text-align: center; font-weight: 600; color: #2563eb;">${a.total_clicks || 0}</td>
+                    <td style="padding: 10px 8px; border-bottom: 1px solid #e5e7eb; text-align: center; font-weight: bold; color: #ff5500;">${a.ctr || 0}%</td>
+                    <td style="padding: 10px 8px; border-bottom: 1px solid #e5e7eb; text-align: center;">
+                        <span style="display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; background-color: ${a.approval_status === 'approved' ? '#d1fae5' : a.approval_status === 'disapproved' ? '#fee2e2' : '#fef3c7'}; color: ${a.approval_status === 'approved' ? '#065f46' : a.approval_status === 'disapproved' ? '#991b1b' : '#92400e'};">
+                            ${a.approval_status ? a.approval_status.charAt(0).toUpperCase() + a.approval_status.slice(1) : 'Pending'}
+                        </span>
+                    </td>
+                    <td style="padding: 10px 8px; border-bottom: 1px solid #e5e7eb; font-size: 11px; color: #6b7280;">
+                        ${a.start_date && a.end_date ? `${new Date(a.start_date).toLocaleDateString()} - ${new Date(a.end_date).toLocaleDateString()}` : 'N/A'}
+                    </td>
+                </tr>
+            `).join('');
+
+            const htmlContent = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>${title}</title>
+                    <meta charset="utf-8" />
+                    <style>
+                        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 30px; color: #111827; }
+                        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #ff5500; padding-bottom: 16px; margin-bottom: 24px; }
+                        .logo-text { font-size: 24px; font-weight: 900; color: #ff5500; }
+                        .sub-header { font-size: 13px; color: #6b7280; margin-top: 4px; }
+                        .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 28px; }
+                        .kpi-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; text-align: center; }
+                        .kpi-val { font-size: 22px; font-weight: 800; color: #111827; }
+                        .kpi-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-top: 4px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+                        th { background: #f3f4f6; color: #374151; font-weight: 700; padding: 10px 8px; border-bottom: 2px solid #e5e7eb; text-align: left; }
+                        .footer { margin-top: 36px; padding-top: 14px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 11px; color: #9ca3af; }
+                        @media print {
+                            body { margin: 15px; }
+                            button { display: none; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <div>
+                            <div class="logo-text">ROAMEO <span style="font-size: 16px; color: #374151; font-weight: 600;">| Ads Performance & Analytics Report</span></div>
+                            <div class="sub-header">Scope: <strong>${filterLabel}</strong> &bull; Generated: ${dateStr}</div>
+                        </div>
+                    </div>
+
+                    <div class="kpi-row">
+                        <div class="kpi-box">
+                            <div class="kpi-val">${summary.total_ads || adsList.length}</div>
+                            <div class="kpi-lbl">Total Campaigns</div>
+                        </div>
+                        <div class="kpi-box">
+                            <div class="kpi-val" style="color: #3b82f6;">${summary.total_impressions || 0}</div>
+                            <div class="kpi-lbl">Total Impressions</div>
+                        </div>
+                        <div class="kpi-box">
+                            <div class="kpi-val" style="color: #10b981;">${summary.total_clicks || 0}</div>
+                            <div class="kpi-lbl">Total Clicks</div>
+                        </div>
+                        <div class="kpi-box">
+                            <div class="kpi-val" style="color: #ff5500;">${summary.average_ctr || 0}%</div>
+                            <div class="kpi-lbl">Average CTR</div>
+                        </div>
+                    </div>
+
+                    <h3 style="font-size: 15px; margin-bottom: 8px; color: #374151;">Detailed Campaign Breakdown</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">#ID</th>
+                                <th>Campaign / Title</th>
+                                <th>Vendor</th>
+                                <th style="text-align: center;">Type</th>
+                                <th>Targeting</th>
+                                <th style="text-align: center;">Views</th>
+                                <th style="text-align: center;">Clicks</th>
+                                <th style="text-align: center;">CTR</th>
+                                <th style="text-align: center;">Status</th>
+                                <th>Schedule</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+
+                    <div class="footer">
+                        Roameo Advertising Platform &bull; Confidential &bull; Generated dynamically on ${dateStr}
+                    </div>
+                </body>
+                </html>
+            `;
+
+            const printWindow = window.open('', '_blank');
+            if (printWindow) {
+                printWindow.document.open();
+                printWindow.document.write(htmlContent);
+                printWindow.document.close();
+                setTimeout(() => {
+                    printWindow.focus();
+                    printWindow.print();
+                }, 400);
+            }
+        } else {
+            Alert.alert('Download Report', 'Report generation is ready. Please view or print on web.');
+        }
+    };
+
+    const openReportModal = async (ad) => {
+        try {
+            setReportLoading(true);
+            setReportData(null);
+            setReportModalVisible(true);
+            const url = `${API_BASE_URL}/vendorcreation/ads/${ad.id}/report`;
+            const response = await fetchWithCors(url);
+            const result = await response.json();
+            if (result.status === 'success') {
+                setReportData(result.data);
+            } else {
+                Alert.alert('Error', result.message || 'Failed to fetch report');
+            }
+        } catch (err) {
+            console.error('Fetch report error:', err);
+            Alert.alert('Error', 'Failed to fetch ad report');
+        } finally {
+            setReportLoading(false);
+        }
+    };
 
     const [formData, setFormData] = useState({
         title: '',
@@ -134,7 +324,7 @@ export default function AdsManagement() {
         }
     };
 
-    
+
     const [rejectModalVisible, setRejectModalVisible] = useState(false);
     const [rejectReason, setRejectReason] = useState('');
     const [actionAd, setActionAd] = useState(null);
@@ -147,8 +337,8 @@ export default function AdsManagement() {
         try {
             setSubmitting(true);
             const startDate = ad.start_date || new Date().toISOString().split('T')[0];
-            const endDate = ad.end_date || new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0];
-            
+            const endDate = ad.end_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
             const response = await fetch(`${API_BASE_URL}/vendorcreation/ads/${ad.id}/approve`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -224,6 +414,7 @@ export default function AdsManagement() {
     useEffect(() => {
         fetchAds();
         fetchApprovedVendors();
+        fetchAnalyticsSummary();
     }, []);
 
     useEffect(() => {
@@ -250,6 +441,7 @@ export default function AdsManagement() {
         setRefreshing(true);
         fetchAds();
         fetchApprovedVendors();
+        fetchAnalyticsSummary();
     };
 
     const resetForm = () => {
@@ -270,6 +462,7 @@ export default function AdsManagement() {
             image_file_name: '',
         });
         setEditingId(null);
+        setPreviewImageError(false);
         setShowStartDatePicker(false);
         setShowEndDatePicker(false);
     };
@@ -298,6 +491,7 @@ export default function AdsManagement() {
             image_uri: null,
             image_file_name: '',
         });
+        setPreviewImageError(false);
         setModalVisible(true);
         setShowStartDatePicker(false);
         setShowEndDatePicker(false);
@@ -331,6 +525,7 @@ export default function AdsManagement() {
                     reader.onloadend = () => {
                         const resultString = reader.result?.toString() || '';
                         const base64 = resultString.includes(',') ? resultString.split(',')[1] : resultString;
+                        setPreviewImageError(false);
                         setFormData(prev => ({
                             ...prev,
                             image_base64: base64,
@@ -631,7 +826,7 @@ export default function AdsManagement() {
             original_url: ad.image_url,
             full_url: imageUrl,
         });
-        
+
         return (
             <View key={ad.id} style={styles.adCard}>
                 <View style={styles.adCardContent}>
@@ -714,43 +909,72 @@ export default function AdsManagement() {
                             </View>
                         )}
                         <View style={styles.actionRow}>
+                            {/* Pending Ads: Only Approve and Reject Icon Buttons */}
                             {(!ad.approval_status || ad.approval_status === 'pending') && (
-                              <>
-                                <TouchableOpacity
-                                    onPress={() => handleApprovePrompt(ad)}
-                                    style={styles.actionBtn}
-                                >
-                                    <Ionicons name="checkmark-circle-outline" size={16} color={COLORS.greenSuccess} />
-                                    <Text style={{color: COLORS.greenSuccess, marginLeft: 4, fontWeight: '500'}}>Approve</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    onPress={() => handleRejectPrompt(ad)}
-                                    style={styles.actionBtn}
-                                >
-                                    <Ionicons name="close-circle-outline" size={16} color={COLORS.redDanger} />
-                                    <Text style={{color: COLORS.redDanger, marginLeft: 4, fontWeight: '500'}}>Reject</Text>
-                                </TouchableOpacity>
-                              </>
+                                <>
+                                    <TouchableOpacity
+                                        onPress={() => handleApprovePrompt(ad)}
+                                        style={[styles.iconActionBtn, { backgroundColor: '#DEF7EC', borderColor: '#BCF0DA' }]}
+                                        accessibilityLabel="Approve Ad"
+                                        {...({ title: 'Approve Ad' } as any)}
+                                    >
+                                        <Ionicons name="checkmark-circle" size={17} color={COLORS.greenSuccess} />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={() => handleRejectPrompt(ad)}
+                                        style={[styles.iconActionBtn, { backgroundColor: '#FDE8E8', borderColor: '#FBD5D5' }]}
+                                        accessibilityLabel="Reject Ad"
+                                        {...({ title: 'Reject Ad' } as any)}
+                                    >
+                                        <Ionicons name="close-circle" size={17} color={COLORS.redDanger} />
+                                    </TouchableOpacity>
+                                </>
                             )}
+
+                            {/* Approved Ads: Report, Edit, Delete Icon Buttons */}
                             {ad.approval_status === 'approved' && (
-                              <>
-                                <TouchableOpacity
-                                    onPress={() => openEditModal(ad)}
-                                    style={styles.actionBtn}
-                                    disabled={isDeleting}
-                                >
-                                    <Ionicons name="pencil-outline" size={16} color={COLORS.primary} />
-                                    <Text style={styles.editText}>Edit</Text>
-                                </TouchableOpacity>
+                                <>
+                                    <TouchableOpacity
+                                        onPress={() => openReportModal(ad)}
+                                        style={[styles.iconActionBtn, { backgroundColor: '#FFF5EB', borderColor: '#FFE0CC' }]}
+                                        disabled={isDeleting}
+                                        accessibilityLabel="View Report"
+                                        {...({ title: 'View Report' } as any)}
+                                    >
+                                        <Ionicons name="bar-chart" size={15} color={COLORS.primary} />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={() => openEditModal(ad)}
+                                        style={[styles.iconActionBtn, { backgroundColor: '#EFF6FF', borderColor: '#DBEAFE' }]}
+                                        disabled={isDeleting}
+                                        accessibilityLabel="Edit Ad"
+                                        {...({ title: 'Edit Ad' } as any)}
+                                    >
+                                        <Ionicons name="pencil" size={15} color="#2563EB" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={() => handleDelete(ad.id, ad.title)}
+                                        style={[styles.iconActionBtn, { backgroundColor: '#FDE8E8', borderColor: '#FBD5D5' }]}
+                                        disabled={isDeleting}
+                                        accessibilityLabel="Delete Ad"
+                                        {...({ title: 'Delete Ad' } as any)}
+                                    >
+                                        <Ionicons name="trash" size={15} color={COLORS.redDanger} />
+                                    </TouchableOpacity>
+                                </>
+                            )}
+
+                            {/* Disapproved / Rejected Ads: Delete Icon Button Only */}
+                            {ad.approval_status === 'disapproved' && (
                                 <TouchableOpacity
                                     onPress={() => handleDelete(ad.id, ad.title)}
-                                    style={styles.actionBtn}
+                                    style={[styles.iconActionBtn, { backgroundColor: '#FDE8E8', borderColor: '#FBD5D5' }]}
                                     disabled={isDeleting}
+                                    accessibilityLabel="Delete Ad"
+                                    {...({ title: 'Delete Ad' } as any)}
                                 >
-                                    <Ionicons name="trash-outline" size={16} color={COLORS.redDanger} />
-                                    <Text style={styles.deleteText}>Delete</Text>
+                                    <Ionicons name="trash" size={15} color={COLORS.redDanger} />
                                 </TouchableOpacity>
-                              </>
                             )}
                         </View>
                     </View>
@@ -764,70 +988,14 @@ export default function AdsManagement() {
             <SafeAreaView style={[styles.container, styles.centerContent]}>
                 <ActivityIndicator size="large" color={COLORS.primary} />
                 <Text style={styles.loadingText}>Loading ads...</Text>
-            
-            {/* Reject Modal */}
-            <Modal
-                animationType="fade"
-                transparent={true}
-                visible={rejectModalVisible}
-                onRequestClose={() => setRejectModalVisible(false)}
-            >
-                <View style={styles.deleteModalOverlay}>
-                    <View style={styles.deleteModalContent}>
-                        <View style={styles.deleteModalHeader}>
-                            <View style={[styles.deleteIconContainer, { backgroundColor: '#FDE8E8' }]}>
-                                <Ionicons name="close-circle-outline" size={24} color={COLORS.redDanger} />
-                            </View>
-                            <Text style={styles.deleteModalTitle}>Reject Ad</Text>
-                            <Text style={styles.deleteModalDesc}>
-                                Enter a reason for rejecting this ad.
-                            </Text>
-                        </View>
-                        
-                        <TextInput
-                            style={[styles.input, {height: 80, marginTop: 15, width: '100%'}]}
-                            placeholder="Reason for rejection..."
-                            multiline
-                            value={rejectReason}
-                            onChangeText={setRejectReason}
-                        />
-
-                        <View style={styles.deleteModalActions}>
-                            <TouchableOpacity 
-                                style={styles.cancelDeleteBtn} 
-                                onPress={() => {
-                                  setRejectModalVisible(false);
-                                  setActionAd(null);
-                                }}
-                            >
-                                <Text style={styles.cancelDeleteBtnText}>Cancel</Text>
-                            </TouchableOpacity>
-                            
-                            <TouchableOpacity 
-                                style={[styles.confirmDeleteBtn, { backgroundColor: COLORS.redDanger }]} 
-                                onPress={submitReject}
-                            >
-                                <Text style={styles.confirmDeleteBtnText}>Reject Ad</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-
-</SafeAreaView>
+            </SafeAreaView>
         );
     }
 
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor={COLORS.darkBg} />
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Roameo Admin</Text>
-                <View style={styles.badgeHeader}>
-                    <Ionicons name="megaphone-outline" size={14} color={COLORS.primary} />
-                    <Text style={styles.badgeHeaderText}>Ads Management</Text>
-                </View>
-            </View>
+
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
@@ -835,131 +1003,460 @@ export default function AdsManagement() {
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
                 }
             >
-                <View style={styles.titleRow}>
-                    <Text style={styles.breadcrumb}>Marketing &gt; Ads Management</Text>
-                    <Text style={styles.pageTitle}>Ads Management</Text>
-                </View>
-                <View style={styles.tabContainer}>
+                <View style={styles.viewSectionTabs}>
                     <TouchableOpacity
-                        style={[
-                            styles.tab,
-                            styles.vendorTab,
-                            selectedTab === 'vendor' && styles.activeTab
-                        ]}
-                        onPress={() => setSelectedTab('vendor')}
+                        style={[styles.viewSectionBtn, viewSection === 'ads' && styles.viewSectionBtnActive]}
+                        onPress={() => setViewSection('ads')}
                     >
-                        <Ionicons
-                            name="pricetag-outline"
-                            size={18}
-                            color={selectedTab === 'vendor' ? '#FFF' : COLORS.primary}
-                        />
-                        <Text style={[
-                            styles.tabText,
-                            selectedTab === 'vendor' && styles.activeTabText
-                        ]}>
-                            Vendor Ads
+                        <Ionicons name="megaphone" size={16} color={viewSection === 'ads' ? COLORS.primary : COLORS.textMuted} />
+                        <Text style={[styles.viewSectionBtnText, viewSection === 'ads' && styles.viewSectionBtnTextActive]} numberOfLines={1}>
+                            Manage Ads
                         </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[
-                            styles.tab,
-                            styles.marketplaceTab,
-                            selectedTab === 'marketplace' && styles.activeTab
-                        ]}
-                        onPress={() => setSelectedTab('marketplace')}
-                    >
-                        <Ionicons
-                            name="globe-outline"
-                            size={18}
-                            color={selectedTab === 'marketplace' ? '#FFF' : COLORS.marketplaceColor}
-                        />
-                        <Text style={[
-                            styles.tabText,
-                            selectedTab === 'marketplace' && styles.activeTabText
-                        ]}>
-                            Market Place
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-                
-                {selectedTab === 'vendor' && (
-                    <View style={{flexDirection: 'row', backgroundColor: '#F3F4F6', marginHorizontal: 20, marginTop: 10, borderRadius: 8, padding: 4}}>
-                        <TouchableOpacity
-                            style={{flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6, backgroundColor: vendorAdType === 'featured' ? '#FFF' : 'transparent', shadowOpacity: vendorAdType === 'featured' ? 0.1 : 0}}
-                            onPress={() => setVendorAdType('featured')}
-                        >
-                            <Text style={{fontWeight: vendorAdType === 'featured' ? 'bold' : '500', color: vendorAdType === 'featured' ? '#111827' : '#6B7280'}}>Featured</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={{flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6, backgroundColor: vendorAdType === 'notification' ? '#FFF' : 'transparent', shadowOpacity: vendorAdType === 'notification' ? 0.1 : 0}}
-                            onPress={() => setVendorAdType('notification')}
-                        >
-                            <Text style={{fontWeight: vendorAdType === 'notification' ? 'bold' : '500', color: vendorAdType === 'notification' ? '#111827' : '#6B7280'}}>Notification</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
 
-                <View style={styles.controlsRow}>
-                    <View style={styles.searchBar}>
-                        <Ionicons name="search-outline" size={18} color={COLORS.textMuted} />
-                        <TextInput
-                            placeholder="Search ads..."
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            style={styles.searchInput}
-                            placeholderTextColor={COLORS.textMuted}
-                        />
-                        {searchQuery.length > 0 && (
-                            <TouchableOpacity onPress={() => setSearchQuery('')}>
-                                <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
-                            </TouchableOpacity>
-                        )}
-                    </View>
                     <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={openAddModal}
+                        style={[styles.viewSectionBtn, viewSection === 'analytics' && styles.viewSectionBtnActive]}
+                        onPress={() => {
+                            setViewSection('analytics');
+                            fetchAnalyticsSummary(selectedVendorFilter, reportsTab);
+                        }}
                     >
-                        <Ionicons name="add" size={24} color="#FFF" />
-                        <Text style={styles.addButtonText}>Add</Text>
+                        <Ionicons name="stats-chart" size={16} color={viewSection === 'analytics' ? COLORS.primary : COLORS.textMuted} />
+                        <Text style={[styles.viewSectionBtnText, viewSection === 'analytics' && styles.viewSectionBtnTextActive]} numberOfLines={1}>
+                            Ad Reports & Analytics
+                        </Text>
                     </TouchableOpacity>
                 </View>
-                <View style={styles.statsRow}>
-                    <View style={styles.statCard}>
-                        <Text style={styles.statNumber}>{filteredAds.length}</Text>
-                        <Text style={styles.statLabel}>Total {selectedTab === 'vendor' ? 'Vendor' : 'Marketplace'} Ads</Text>
-                    </View>
-                    <View style={styles.statCard}>
-                        <Text style={[styles.statNumber, { color: COLORS.greenSuccess }]}>
-                            {filteredAds.filter(ad => ad.is_active === 1).length}
-                        </Text>
-                        <Text style={styles.statLabel}>Active</Text>
-                    </View>
-                    <View style={styles.statCard}>
-                        <Text style={[styles.statNumber, { color: COLORS.redDanger }]}>
-                            {filteredAds.filter(ad => ad.is_active === 0).length}
-                        </Text>
-                        <Text style={styles.statLabel}>Pending</Text>
-                    </View>
-                </View>
-                {!!error && (
-                    <View style={styles.errorContainer}>
-                        <Ionicons name="alert-circle" size={24} color={COLORS.redDanger} />
-                        <Text style={styles.errorText}>{error}</Text>
-                        <TouchableOpacity style={styles.retryButton} onPress={fetchAds}>
-                            <Text style={styles.retryButtonText}>Retry</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-                {filteredAds.length === 0 ? (
-                    <View style={styles.emptyState}>
-                        <Ionicons name="megaphone-outline" size={60} color={COLORS.textMuted} />
-                        <Text style={styles.emptyStateTitle}>No Ads Found</Text>
-                        <Text style={styles.emptyStateText}>
-                            Click the "Add" button to create your first ad
-                        </Text>
-                    </View>
+
+                {viewSection === 'ads' ? (
+                    <>
+                        <View style={styles.tabContainer}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.tab,
+                                    styles.vendorTab,
+                                    selectedTab === 'vendor' && styles.activeTab
+                                ]}
+                                onPress={() => setSelectedTab('vendor')}
+                            >
+                                <Ionicons
+                                    name="pricetag-outline"
+                                    size={18}
+                                    color={selectedTab === 'vendor' ? '#FFF' : COLORS.primary}
+                                />
+                                <Text style={[
+                                    styles.tabText,
+                                    selectedTab === 'vendor' && styles.activeTabText
+                                ]}>
+                                    Vendor Ads
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[
+                                    styles.tab,
+                                    styles.marketplaceTab,
+                                    selectedTab === 'marketplace' && styles.activeTab
+                                ]}
+                                onPress={() => setSelectedTab('marketplace')}
+                            >
+                                <Ionicons
+                                    name="globe-outline"
+                                    size={18}
+                                    color={selectedTab === 'marketplace' ? '#FFF' : COLORS.marketplaceColor}
+                                />
+                                <Text style={[
+                                    styles.tabText,
+                                    selectedTab === 'marketplace' && styles.activeTabText
+                                ]}>
+                                    Market Place
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {selectedTab === 'vendor' && (
+                            <View style={{ flexDirection: 'row', backgroundColor: '#F3F4F6', marginHorizontal: 20, marginTop: 10, borderRadius: 8, padding: 4 }}>
+                                <TouchableOpacity
+                                    style={{ flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6, backgroundColor: vendorAdType === 'featured' ? '#FFF' : 'transparent', shadowOpacity: vendorAdType === 'featured' ? 0.1 : 0 }}
+                                    onPress={() => setVendorAdType('featured')}
+                                >
+                                    <Text style={{ fontWeight: vendorAdType === 'featured' ? 'bold' : '500', color: vendorAdType === 'featured' ? '#111827' : '#6B7280' }}>Featured</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={{ flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6, backgroundColor: vendorAdType === 'notification' ? '#FFF' : 'transparent', shadowOpacity: vendorAdType === 'notification' ? 0.1 : 0 }}
+                                    onPress={() => setVendorAdType('notification')}
+                                >
+                                    <Text style={{ fontWeight: vendorAdType === 'notification' ? 'bold' : '500', color: vendorAdType === 'notification' ? '#111827' : '#6B7280' }}>Notification</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+
+                        <View style={styles.controlsRow}>
+                            <View style={styles.searchBar}>
+                                <Ionicons name="search-outline" size={18} color={COLORS.textMuted} />
+                                <TextInput
+                                    placeholder="Search ads..."
+                                    value={searchQuery}
+                                    onChangeText={setSearchQuery}
+                                    style={styles.searchInput}
+                                    placeholderTextColor={COLORS.textMuted}
+                                />
+                                {searchQuery.length > 0 && (
+                                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                                        <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                            <TouchableOpacity
+                                style={styles.addButton}
+                                onPress={openAddModal}
+                            >
+                                <Ionicons name="add" size={24} color="#FFF" />
+                                <Text style={styles.addButtonText}>Add</Text>
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.statsRow}>
+                            <View style={styles.statCard}>
+                                <Text style={styles.statNumber}>{filteredAds.length}</Text>
+                                <Text style={styles.statLabel}>Total {selectedTab === 'vendor' ? 'Vendor' : 'Marketplace'} Ads</Text>
+                            </View>
+                            <View style={styles.statCard}>
+                                <Text style={[styles.statNumber, { color: COLORS.greenSuccess }]}>
+                                    {filteredAds.filter(ad => ad.is_active === 1).length}
+                                </Text>
+                                <Text style={styles.statLabel}>Active</Text>
+                            </View>
+                            <View style={styles.statCard}>
+                                <Text style={[styles.statNumber, { color: COLORS.redDanger }]}>
+                                    {filteredAds.filter(ad => ad.is_active === 0).length}
+                                </Text>
+                                <Text style={styles.statLabel}>Pending</Text>
+                            </View>
+                        </View>
+                        {!!error && (
+                            <View style={styles.errorContainer}>
+                                <Ionicons name="alert-circle" size={24} color={COLORS.redDanger} />
+                                <Text style={styles.errorText}>{error}</Text>
+                                <TouchableOpacity style={styles.retryButton} onPress={fetchAds}>
+                                    <Text style={styles.retryButtonText}>Retry</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                        {filteredAds.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <Ionicons name="megaphone-outline" size={60} color={COLORS.textMuted} />
+                                <Text style={styles.emptyStateTitle}>No Ads Found</Text>
+                                <Text style={styles.emptyStateText}>
+                                    Click the "Add" button to create your first ad
+                                </Text>
+                            </View>
+                        ) : (
+                            filteredAds.map(ad => renderAdCard(ad))
+                        )}
+                    </>
                 ) : (
-                    filteredAds.map(ad => renderAdCard(ad))
+                    /* AD REPORTS & ANALYTICS VIEW FOR ADMIN */
+                    <View style={styles.analyticsMainContainer}>
+                        {/* Reports Type Tabs */}
+                        <View style={styles.tabContainer}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.tab,
+                                    styles.vendorTab,
+                                    reportsTab === 'vendor' && styles.activeTab
+                                ]}
+                                onPress={() => {
+                                    setReportsTab('vendor');
+                                    fetchAnalyticsSummary(selectedVendorFilter, 'vendor');
+                                }}
+                            >
+                                <Ionicons
+                                    name="pricetag-outline"
+                                    size={18}
+                                    color={reportsTab === 'vendor' ? '#FFF' : COLORS.primary}
+                                />
+                                <Text style={[
+                                    styles.tabText,
+                                    reportsTab === 'vendor' && styles.activeTabText
+                                ]}>
+                                    Vendor Ads
+                                </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[
+                                    styles.tab,
+                                    styles.marketplaceTab,
+                                    reportsTab === 'marketplace' && styles.activeTab
+                                ]}
+                                onPress={() => {
+                                    setReportsTab('marketplace');
+                                    fetchAnalyticsSummary(selectedVendorFilter, 'marketplace');
+                                }}
+                            >
+                                <Ionicons
+                                    name="globe-outline"
+                                    size={18}
+                                    color={reportsTab === 'marketplace' ? '#FFF' : COLORS.marketplaceColor}
+                                />
+                                <Text style={[
+                                    styles.tabText,
+                                    reportsTab === 'marketplace' && styles.activeTabText
+                                ]}>
+                                    Market Place
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Vendor Picker Row - Custom Dropdown (Only for Vendor Reports) */}
+                        {reportsTab === 'vendor' && (
+                        <View style={{ zIndex: 100, marginBottom: 10 }}>
+                            <TouchableOpacity
+                                style={[styles.vendorPickerBox, { justifyContent: 'space-between' }]}
+                                onPress={() => setShowVendorDropdown(prev => !prev)}
+                                activeOpacity={0.8}
+                            >
+                                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                    <Ionicons name="business" size={16} color={COLORS.primary} style={{ marginRight: 8 }} />
+                                    <Text style={{ fontSize: 13, color: COLORS.textDark, flex: 1 }} numberOfLines={1}>
+                                        {selectedVendorFilter === 'all'
+                                            ? '🏢 All Vendors (Platform Wide)'
+                                            : (vendors.find(v => String(v.id) === selectedVendorFilter)?.business_name ||
+                                                vendors.find(v => String(v.id) === selectedVendorFilter)?.owner_name ||
+                                                `Vendor #${selectedVendorFilter}`)}
+                                    </Text>
+                                </View>
+                                <Ionicons name={showVendorDropdown ? 'chevron-up' : 'chevron-down'} size={16} color={COLORS.textMuted} />
+                            </TouchableOpacity>
+
+                            {showVendorDropdown && (
+                                <>
+                                    {/* Transparent overlay to close on outside click */}
+                                    <TouchableOpacity
+                                        style={{ position: 'absolute', top: 44, left: -1000, right: -1000, bottom: -2000, zIndex: 98 }}
+                                        onPress={() => setShowVendorDropdown(false)}
+                                        activeOpacity={1}
+                                    />
+                                    <View style={{
+                                        position: 'absolute',
+                                        top: 44,
+                                        left: 0,
+                                        right: 0,
+                                        backgroundColor: '#FFFFFF',
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: COLORS.border,
+                                        maxHeight: 220,
+                                        zIndex: 99,
+                                        shadowColor: '#000',
+                                        shadowOffset: { width: 0, height: 4 },
+                                        shadowOpacity: 0.15,
+                                        shadowRadius: 8,
+                                        elevation: 20,
+                                        overflow: 'hidden',
+                                    }}>
+                                        <ScrollView showsVerticalScrollIndicator nestedScrollEnabled>
+                                            {[
+                                                { id: 'all', label: '🏢 All Vendors (Platform Wide)' },
+                                                ...vendors.map(v => ({
+                                                    id: String(v.id),
+                                                    label: v.business_name || v.owner_name || `Vendor #${v.id}`
+                                                }))
+                                            ].map((opt) => (
+                                                <TouchableOpacity
+                                                    key={opt.id}
+                                                    style={{
+                                                        paddingVertical: 11,
+                                                        paddingHorizontal: 14,
+                                                        borderBottomWidth: 1,
+                                                        borderBottomColor: '#F3F4F6',
+                                                        backgroundColor: selectedVendorFilter === opt.id ? '#FFF5EB' : '#FFFFFF',
+                                                    }}
+                                                    onPress={() => {
+                                                        setSelectedVendorFilter(opt.id);
+                                                        fetchAnalyticsSummary(opt.id);
+                                                        setShowVendorDropdown(false);
+                                                    }}
+                                                >
+                                                    <Text style={{
+                                                        fontSize: 13,
+                                                        color: selectedVendorFilter === opt.id ? COLORS.primary : COLORS.textDark,
+                                                        fontWeight: selectedVendorFilter === opt.id ? '600' : '400',
+                                                    }}>
+                                                        {opt.label}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    </View>
+                                </>
+                            )}
+                        </View>
+                        )}
+
+                        {/* Search and PDF Action Row */}
+                        <View style={[styles.analyticsControlRow, { flex: 1 }]}>
+                            <View style={[styles.searchBar, { flex: 1, minWidth: 0, marginBottom: 0, height: 42, overflow: 'hidden' }]}>
+                                <Ionicons name="search-outline" size={18} color={COLORS.textMuted} />
+                                <TextInput
+                                    placeholder="Filter campaigns, category..."
+                                    value={analyticsSearch}
+                                    onChangeText={setAnalyticsSearch}
+                                    style={styles.searchInput}
+                                    placeholderTextColor={COLORS.textMuted}
+                                />
+                                {analyticsSearch.length > 0 && (
+                                    <TouchableOpacity onPress={() => setAnalyticsSearch('')}>
+                                        <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            <TouchableOpacity
+                                style={styles.adminPdfBtn}
+                                onPress={() => downloadReportPDF(analyticsData, `Ad_Analytics_${selectedVendorFilter === 'all' ? 'All_Vendors' : 'Vendor_' + selectedVendorFilter}`)}
+                            >
+                                <Ionicons name="download-outline" size={16} color="#FFF" />
+                                <Text style={styles.adminPdfBtnText}>Download PDF</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* KPI Summary Cards Strip (Identical to Vendor Panel) */}
+                        {analyticsData?.summary && (
+                            <View style={styles.analyticsKpiGrid}>
+                                <View style={styles.analyticsKpiCard}>
+                                    <Text style={styles.analyticsKpiValue}>{analyticsData.summary.total_ads || 0}</Text>
+                                    <Text style={styles.analyticsKpiLabel}>Total Ads</Text>
+                                </View>
+                                <View style={styles.analyticsKpiCard}>
+                                    <Text style={[styles.analyticsKpiValue, { color: '#3B82F6' }]}>{analyticsData.summary.total_impressions || 0}</Text>
+                                    <Text style={styles.analyticsKpiLabel}>Views (Impr)</Text>
+                                </View>
+                                <View style={styles.analyticsKpiCard}>
+                                    <Text style={[styles.analyticsKpiValue, { color: '#10B981' }]}>{analyticsData.summary.total_clicks || 0}</Text>
+                                    <Text style={styles.analyticsKpiLabel}>Total Clicks</Text>
+                                </View>
+                                <View style={styles.analyticsKpiCard}>
+                                    <Text style={[styles.analyticsKpiValue, { color: COLORS.primary }]}>{analyticsData.summary.average_ctr || 0}%</Text>
+                                    <Text style={styles.analyticsKpiLabel}>Avg CTR</Text>
+                                </View>
+                            </View>
+                        )}
+
+                        {/* Analytics Table */}
+                        <View style={styles.analyticsTableWrapper}>
+                            <View style={styles.analyticsTableHeaderBar}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <Ionicons name="list" size={18} color={COLORS.primary} />
+                                    <Text style={styles.analyticsTableHeaderTitle}>
+                                        {selectedVendorFilter === 'all' ? 'All Active & Past Campaigns' : `Vendor Campaigns (${analyticsData?.ads?.length || 0})`}
+                                    </Text>
+                                </View>
+                                <TouchableOpacity
+                                    style={styles.analyticsReloadBtn}
+                                    onPress={() => fetchAnalyticsSummary(selectedVendorFilter)}
+                                >
+                                    <Ionicons name="refresh" size={14} color={COLORS.textMuted} />
+                                    <Text style={styles.analyticsReloadBtnText}>Refresh</Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            {analyticsLoading ? (
+                                <View style={{ padding: 40, alignItems: 'center' }}>
+                                    <ActivityIndicator size="large" color={COLORS.primary} />
+                                    <Text style={{ marginTop: 10, color: COLORS.textMuted }}>Loading analytics report...</Text>
+                                </View>
+                            ) : !analyticsData?.ads || analyticsData.ads.length === 0 ? (
+                                <View style={{ padding: 36, alignItems: 'center' }}>
+                                    <Ionicons name="bar-chart-outline" size={48} color={COLORS.textMuted} />
+                                    <Text style={{ marginTop: 10, fontSize: 14, fontWeight: '600', color: COLORS.textDark }}>No Campaign Data Found</Text>
+                                    <Text style={{ fontSize: 12, color: COLORS.textMuted, marginTop: 4 }}>No ads found matching the selected vendor filter.</Text>
+                                </View>
+                            ) : (
+                                <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+                                    <View style={{ minWidth: 875 }}>
+                                        <View style={styles.adminTableHeaderRow}>
+                                            <Text style={[styles.adminTableHeaderCell, { width: 50, textAlign: 'left', paddingLeft: 6 }]}>#ID</Text>
+                                            <Text style={[styles.adminTableHeaderCell, { width: 160, textAlign: 'left', paddingHorizontal: 6 }]}>Campaign</Text>
+                                            <Text style={[styles.adminTableHeaderCell, { width: 130, textAlign: 'left', paddingHorizontal: 6 }]}>Vendor</Text>
+                                            <Text style={[styles.adminTableHeaderCell, { width: 85, textAlign: 'center' }]}>Type</Text>
+                                            <Text style={[styles.adminTableHeaderCell, { width: 95, textAlign: 'left', paddingHorizontal: 6 }]}>Targeting</Text>
+                                            <Text style={[styles.adminTableHeaderCell, { width: 70, textAlign: 'center' }]}>Views</Text>
+                                            <Text style={[styles.adminTableHeaderCell, { width: 70, textAlign: 'center' }]}>Clicks</Text>
+                                            <Text style={[styles.adminTableHeaderCell, { width: 70, textAlign: 'center' }]}>CTR</Text>
+                                            <Text style={[styles.adminTableHeaderCell, { width: 70, textAlign: 'center' }]}>Orders</Text>
+                                            <Text style={[styles.adminTableHeaderCell, { width: 85, textAlign: 'center' }]}>Status</Text>
+                                            <Text style={[styles.adminTableHeaderCell, { width: 60, textAlign: 'center' }]}>Action</Text>
+                                        </View>
+
+                                        {analyticsData.ads
+                                            .filter((item) => {
+                                                if (!analyticsSearch.trim()) return true;
+                                                const q = analyticsSearch.toLowerCase();
+                                                return (
+                                                    (item.title && item.title.toLowerCase().includes(q)) ||
+                                                    (item.vendor_name && item.vendor_name.toLowerCase().includes(q)) ||
+                                                    (item.category_name && item.category_name.toLowerCase().includes(q))
+                                                );
+                                            })
+                                            .map((item, idx) => {
+                                                const isApproved = item.approval_status === 'approved';
+                                                const isDisapproved = item.approval_status === 'disapproved';
+                                                return (
+                                                    <View key={item.id || idx} style={[styles.adminTableDataRow, idx % 2 === 1 && { backgroundColor: '#F9FAFB' }]}>
+                                                        <Text style={[styles.adminTableDataCell, { width: 50, fontWeight: '700', color: COLORS.textMuted, textAlign: 'left', paddingLeft: 6 }]}>#{item.id}</Text>
+                                                        <View style={{ width: 160, paddingHorizontal: 6 }}>
+                                                            <Text style={styles.adminTableTitle} numberOfLines={1}>{item.title || 'Untitled'}</Text>
+                                                            {item.category_name && <Text style={styles.adminTableSub} numberOfLines={1}>{item.category_name}</Text>}
+                                                        </View>
+                                                        <View style={{ width: 130, paddingHorizontal: 6 }}>
+                                                            <Text style={styles.adminTableVendorText} numberOfLines={1}>
+                                                                {item.ad_type === 'marketplace' ? '🌐 Marketplace' : (item.vendor_name || `Vendor #${item.vendor_id}`)}
+                                                            </Text>
+                                                        </View>
+                                                        <View style={{ width: 85, alignItems: 'center' }}>
+                                                            <Text style={[
+                                                                styles.typeBadgeAdmin,
+                                                                item.campaign_type === 'notification' ? styles.typeBadgeNotificationAdmin : styles.typeBadgeFeaturedAdmin
+                                                            ]}>
+                                                                {item.campaign_type === 'notification' ? 'Notif' : 'Featured'}
+                                                            </Text>
+                                                        </View>
+                                                        <Text style={[styles.adminTableDataCell, { width: 95, textAlign: 'left', paddingHorizontal: 6 }]} numberOfLines={1}>
+                                                            {item.target_type === 'coupon' ? '🎟️ Coupons' : item.target_type === 'category' ? '📁 Category' : 'Store / Global'}
+                                                        </Text>
+                                                        <Text style={[styles.adminTableDataCell, { width: 70, textAlign: 'center', fontWeight: '600' }]}>{item.total_impressions || 0}</Text>
+                                                        <Text style={[styles.adminTableDataCell, { width: 70, textAlign: 'center', fontWeight: '600', color: '#2563EB' }]}>{item.total_clicks || 0}</Text>
+                                                        <Text style={[styles.adminTableDataCell, { width: 70, textAlign: 'center', fontWeight: '700', color: COLORS.primary }]}>{item.ctr || 0}%</Text>
+                                                        <Text style={[styles.adminTableDataCell, { width: 70, textAlign: 'center', fontWeight: '700', color: '#059669' }]}>{item.total_orders || 0}</Text>
+                                                        <View style={{ width: 85, alignItems: 'center' }}>
+                                                            <View style={[
+                                                                styles.statusBadgePillAdmin,
+                                                                isApproved ? styles.statusApprovedAdmin : isDisapproved ? styles.statusDisapprovedAdmin : styles.statusPendingAdmin
+                                                            ]}>
+                                                                <Text style={[
+                                                                    styles.statusBadgeTextAdmin,
+                                                                    isApproved ? { color: '#047857' } : isDisapproved ? { color: '#B91C1C' } : { color: '#B45309' }
+                                                                ]}>
+                                                                    {item.approval_status ? item.approval_status.charAt(0).toUpperCase() + item.approval_status.slice(1) : 'Pending'}
+                                                                </Text>
+                                                            </View>
+                                                        </View>
+                                                        <View style={{ width: 60, alignItems: 'center' }}>
+                                                            <TouchableOpacity
+                                                                style={styles.adminTableActionBtn}
+                                                                onPress={() => openReportModal(item)}
+                                                            >
+                                                                <Ionicons name="stats-chart" size={14} color={COLORS.primary} />
+                                                            </TouchableOpacity>
+                                                        </View>
+                                                    </View>
+                                                );
+                                            })}
+                                    </View>
+                                </ScrollView>
+                            )}
+                        </View>
+                    </View>
                 )}
             </ScrollView>
             <Modal
@@ -1080,24 +1577,41 @@ export default function AdsManagement() {
                                     {formData.image_url ? 'Change Image' : 'Upload Image'}
                                 </Text>
                             </TouchableOpacity>
-                            {!!formData.image_url && (
+                            {!!formData.image_url && !previewImageError ? (
                                 <View style={styles.imagePreviewContainer}>
                                     <Image
                                         source={{ uri: formData.image_url }}
                                         style={styles.imagePreview}
                                         resizeMode="cover"
-                                        onError={(e) => {
-                                            console.error('Preview image load error:', e.nativeEvent.error);
+                                        onError={() => {
+                                            setPreviewImageError(true);
                                         }}
                                     />
                                     <TouchableOpacity
                                         style={styles.removeImageButton}
-                                        onPress={() => setFormData({ ...formData, image_url: '', image_base64: null, image_uri: null, image_file_name: '' })}
+                                        onPress={() => {
+                                            setFormData({ ...formData, image_url: '', image_base64: null, image_uri: null, image_file_name: '' });
+                                            setPreviewImageError(false);
+                                        }}
                                     >
                                         <Ionicons name="close-circle" size={24} color={COLORS.redDanger} />
                                     </TouchableOpacity>
                                 </View>
-                            )}
+                            ) : !!formData.image_url && previewImageError ? (
+                                <View style={[styles.imagePreviewContainer, { height: 70, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FEE2E2', borderRadius: 8 }]}>
+                                    <Ionicons name="image-outline" size={22} color={COLORS.redDanger} />
+                                    <Text style={{ color: COLORS.redDanger, fontSize: 12, marginTop: 4 }}>Image unavailable</Text>
+                                    <TouchableOpacity
+                                        style={styles.removeImageButton}
+                                        onPress={() => {
+                                            setFormData({ ...formData, image_url: '', image_base64: null, image_uri: null, image_file_name: '' });
+                                            setPreviewImageError(false);
+                                        }}
+                                    >
+                                        <Ionicons name="close-circle" size={24} color={COLORS.redDanger} />
+                                    </TouchableOpacity>
+                                </View>
+                            ) : null}
                             <Text style={styles.label}>Start Date</Text>
                             {Platform.OS === 'web' ? (
                                 renderDatePickerWeb('start')
@@ -1222,6 +1736,213 @@ export default function AdsManagement() {
                                 onPress={performDelete}
                             >
                                 <Text style={styles.btnPrimaryText}>Delete</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+            {/* Ad Performance Report Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={reportModalVisible}
+                onRequestClose={() => setReportModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { maxHeight: '90%', width: '92%', alignSelf: 'center', maxWidth: 560 }]}>
+                        <View style={styles.modalHeader}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <Ionicons name="stats-chart" size={20} color={COLORS.primary} />
+                                <Text style={styles.modalTitle}>Ad Performance Report</Text>
+                            </View>
+                            <TouchableOpacity
+                                onPress={() => setReportModalVisible(false)}
+                                style={styles.closeButton}
+                            >
+                                <Ionicons name="close" size={24} color={COLORS.textDark} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView showsVerticalScrollIndicator={false} style={{ paddingHorizontal: 4 }}>
+                            {reportLoading ? (
+                                <View style={{ padding: 40, alignItems: 'center' }}>
+                                    <ActivityIndicator size="large" color={COLORS.primary} />
+                                    <Text style={{ marginTop: 12, color: COLORS.textMuted }}>Loading live analytics...</Text>
+                                </View>
+                            ) : reportData ? (
+                                <>
+                                    {/* Ad Details Summary */}
+                                    <View style={styles.reportHeaderCard}>
+                                        {reportData.ad?.image_url && !failedImages['report_' + reportData.ad.id] ? (
+                                            <Image
+                                                source={{ uri: getFullImageUrl(reportData.ad.image_url) }}
+                                                style={styles.reportThumb}
+                                                resizeMode="cover"
+                                                onError={() => {
+                                                    setFailedImages(prev => ({ ...prev, ['report_' + reportData.ad.id]: true }));
+                                                }}
+                                            />
+                                        ) : (
+                                            <View style={[styles.reportThumb, { justifyContent: 'center', alignItems: 'center' }]}>
+                                                <Ionicons name="image-outline" size={24} color={COLORS.textMuted} />
+                                            </View>
+                                        )}
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.reportAdTitle}>{reportData.ad?.title}</Text>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                                                <View style={[styles.badgeTag, { backgroundColor: reportData.ad?.ad_type === 'marketplace' ? '#E0E7FF' : '#FFEDD5' }]}>
+                                                    <Text style={{ fontSize: 11, fontWeight: '600', color: reportData.ad?.ad_type === 'marketplace' ? '#3730A3' : '#C2410C' }}>
+                                                        {reportData.ad?.ad_type === 'marketplace' ? 'Marketplace Ad' : 'Vendor Ad'}
+                                                    </Text>
+                                                </View>
+                                                <View style={[styles.badgeTag, { backgroundColor: reportData.ad?.campaign_type === 'notification' ? '#FEE2E2' : '#EFF6FF' }]}>
+                                                    <Text style={{ fontSize: 11, fontWeight: '600', color: reportData.ad?.campaign_type === 'notification' ? '#991B1B' : '#1E40AF' }}>
+                                                        {reportData.ad?.campaign_type === 'notification' ? 'Notification' : 'Featured'}
+                                                    </Text>
+                                                </View>
+                                                <View style={[styles.badgeTag, { backgroundColor: reportData.ad?.is_active === 1 ? '#DEF7EC' : '#FDE8E8' }]}>
+                                                    <Text style={{ fontSize: 11, fontWeight: '600', color: reportData.ad?.is_active === 1 ? '#03543F' : '#9B1C1C' }}>
+                                                        {reportData.ad?.is_active === 1 ? 'Active' : 'Inactive'}
+                                                    </Text>
+                                                </View>
+                                            </View>
+
+                                            {reportData.ad?.ad_type === 'marketplace' && !!reportData.ad?.link_url && (
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 }}>
+                                                    <Ionicons name="globe-outline" size={13} color={COLORS.marketplaceColor} />
+                                                    <Text style={{ fontSize: 12, color: COLORS.textMuted }} numberOfLines={1}>
+                                                        Destination: {reportData.ad.link_url}
+                                                    </Text>
+                                                </View>
+                                            )}
+
+                                            {reportData.ad?.ad_type === 'vendor' && !!reportData.ad?.vendor_name && (
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 }}>
+                                                    <Ionicons name="business-outline" size={13} color={COLORS.textMuted} />
+                                                    <Text style={{ fontSize: 12, color: COLORS.textMuted }}>
+                                                        Vendor: {reportData.ad.vendor_name}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    </View>
+
+                                    {/* Metric KPI Cards */}
+                                    <Text style={styles.sectionHeaderTitle}>Performance Overview</Text>
+                                    <View style={styles.kpiGridAdmin}>
+                                        <View style={styles.kpiCardAdmin}>
+                                            <Ionicons name="eye-outline" size={20} color="#3B82F6" />
+                                            <Text style={styles.kpiNumberAdmin}>{reportData.metrics?.total_impressions || 0}</Text>
+                                            <Text style={styles.kpiLabelAdmin}>Total Views</Text>
+                                        </View>
+                                        <View style={styles.kpiCardAdmin}>
+                                            <Ionicons name="people-outline" size={20} color="#10B981" />
+                                            <Text style={styles.kpiNumberAdmin}>{reportData.metrics?.unique_viewers || 0}</Text>
+                                            <Text style={styles.kpiLabelAdmin}>Unique Viewers</Text>
+                                        </View>
+                                        <View style={styles.kpiCardAdmin}>
+                                            <Ionicons name="hand-left-outline" size={20} color="#F59E0B" />
+                                            <Text style={styles.kpiNumberAdmin}>{reportData.metrics?.total_clicks || 0}</Text>
+                                            <Text style={styles.kpiLabelAdmin}>Total Clicks</Text>
+                                        </View>
+                                        <View style={styles.kpiCardAdmin}>
+                                            <Ionicons name="person-outline" size={20} color="#8B5CF6" />
+                                            <Text style={styles.kpiNumberAdmin}>{reportData.metrics?.unique_clickers || 0}</Text>
+                                            <Text style={styles.kpiLabelAdmin}>Unique Clickers</Text>
+                                        </View>
+                                    </View>
+
+                                    {/* CTR Card */}
+                                    <View style={styles.ctrBannerAdmin}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.ctrTitleAdmin}>Click-Through Rate (CTR)</Text>
+                                            <Text style={styles.ctrDescAdmin}>Percentage of ad views that converted into clicks</Text>
+                                        </View>
+                                        <Text style={styles.ctrNumberAdmin}>{reportData.metrics?.ctr || 0}%</Text>
+                                    </View>
+
+                                    {/* Daily Trends Table */}
+                                    <Text style={styles.sectionHeaderTitle}>Activity History (Last 30 Days)</Text>
+                                    {reportData.daily_trends && reportData.daily_trends.length > 0 ? (
+                                        <View style={styles.reportTable}>
+                                            <View style={styles.reportTableHeader}>
+                                                <Text style={[styles.reportTableHeaderText, { flex: 1.5 }]}>Date</Text>
+                                                <Text style={styles.reportTableHeaderText}>Views</Text>
+                                                <Text style={styles.reportTableHeaderText}>Clicks</Text>
+                                                <Text style={styles.reportTableHeaderText}>CTR</Text>
+                                            </View>
+                                            {reportData.daily_trends.map((row, i) => (
+                                                <View key={i} style={[styles.reportTableRow, i % 2 === 1 && { backgroundColor: '#F9FAFB' }]}>
+                                                    <Text style={[styles.reportTableCell, { flex: 1.5, fontWeight: '500' }]}>{row.date}</Text>
+                                                    <Text style={styles.reportTableCell}>{row.impressions}</Text>
+                                                    <Text style={styles.reportTableCell}>{row.clicks}</Text>
+                                                    <Text style={[styles.reportTableCell, { color: COLORS.primary, fontWeight: 'bold' }]}>{row.ctr}%</Text>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    ) : (
+                                        <View style={styles.noHistoryBox}>
+                                            <Ionicons name="calendar-outline" size={24} color={COLORS.textMuted} />
+                                            <Text style={{ fontSize: 13, color: COLORS.textMuted, marginTop: 4 }}>No activity logged in the last 30 days yet.</Text>
+                                        </View>
+                                    )}
+
+                                    <View style={styles.reportFooterAdmin}>
+                                        <Text style={styles.reportFooterTextAdmin}>
+                                            Report generated dynamically: {new Date(reportData.generated_at).toLocaleString()}
+                                        </Text>
+                                    </View>
+                                </>
+                            ) : (
+                                <Text style={{ textAlign: 'center', marginVertical: 30, color: COLORS.textMuted }}>No report data available.</Text>
+                            )}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Reject Ad Modal */}
+            <Modal
+                animationType="fade"
+                transparent={true}
+                visible={rejectModalVisible}
+                onRequestClose={() => setRejectModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, styles.deleteModalContent, { width: Platform.OS === 'web' ? '450px' : '90%' }]}>
+                        <View style={styles.deleteIconContainer}>
+                            <Ionicons name="close-circle-outline" size={48} color={COLORS.redDanger} />
+                        </View>
+                        <Text style={styles.deleteModalTitle}>Reject Ad</Text>
+                        <Text style={[styles.deleteModalMessage, { marginBottom: 12 }]}>
+                            Enter a reason for rejecting "{actionAd?.title || 'this ad'}". The vendor will see this explanation.
+                        </Text>
+
+                        <TextInput
+                            style={[styles.input, { height: 80, width: '100%', textAlignVertical: 'top' }]}
+                            placeholder="Reason for rejection (e.g. Image does not meet quality guidelines)..."
+                            multiline
+                            value={rejectReason}
+                            onChangeText={setRejectReason}
+                        />
+
+                        <View style={[styles.deleteModalButtons, { marginTop: 16 }]}>
+                            <TouchableOpacity
+                                style={[styles.btn, styles.btnCancel, styles.deleteModalButton]}
+                                onPress={() => {
+                                    setRejectModalVisible(false);
+                                    setActionAd(null);
+                                    setRejectReason('');
+                                }}
+                            >
+                                <Text style={styles.btnCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.btn, styles.deleteConfirmButton, { backgroundColor: COLORS.redDanger }]}
+                                onPress={submitReject}
+                            >
+                                <Text style={styles.btnPrimaryText}>Reject Ad</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -1435,6 +2156,7 @@ const styles = StyleSheet.create({
     adBody: {
         flex: 1,
         padding: 10,
+        minWidth: 0,
     },
     adHeader: {
         flexDirection: 'row',
@@ -1502,11 +2224,20 @@ const styles = StyleSheet.create({
     },
     actionRow: {
         flexDirection: 'row',
+        alignItems: 'center',
         justifyContent: 'flex-end',
-        paddingTop: 6,
+        paddingTop: 8,
         borderTopWidth: 1,
         borderTopColor: COLORS.border,
-        gap: 12,
+        gap: 8,
+    },
+    iconActionBtn: {
+        width: 30,
+        height: 30,
+        borderRadius: 6,
+        borderWidth: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     actionBtn: {
         flexDirection: 'row',
@@ -1757,5 +2488,377 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: COLORS.textDark,
         flex: 1,
+    },
+    reportHeaderCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F9FAFB',
+        borderRadius: 10,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        marginBottom: 16,
+    },
+    reportThumb: {
+        width: 60,
+        height: 60,
+        borderRadius: 8,
+        marginRight: 12,
+        backgroundColor: '#E5E7EB',
+    },
+    reportAdTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: COLORS.textDark,
+    },
+    badgeTag: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 12,
+    },
+    sectionHeaderTitle: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: COLORS.textDark,
+        marginBottom: 10,
+        marginTop: 6,
+    },
+    kpiGridAdmin: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 14,
+    },
+    kpiCardAdmin: {
+        flex: 1,
+        minWidth: '46%',
+        backgroundColor: '#F9FAFB',
+        borderRadius: 8,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        alignItems: 'center',
+    },
+    kpiNumberAdmin: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: COLORS.textDark,
+        marginVertical: 4,
+    },
+    kpiLabelAdmin: {
+        fontSize: 12,
+        color: COLORS.textMuted,
+    },
+    ctrBannerAdmin: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: '#FFF7ED',
+        borderRadius: 8,
+        padding: 14,
+        borderWidth: 1,
+        borderColor: '#FED7AA',
+        marginBottom: 16,
+    },
+    ctrTitleAdmin: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#9A3412',
+    },
+    ctrDescAdmin: {
+        fontSize: 11,
+        color: '#C2410C',
+        marginTop: 2,
+    },
+    ctrNumberAdmin: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: COLORS.primary,
+    },
+    reportTable: {
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginBottom: 16,
+    },
+    reportTableHeader: {
+        flexDirection: 'row',
+        backgroundColor: '#F3F4F6',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.border,
+    },
+    reportTableHeaderText: {
+        flex: 1,
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: '#4B5563',
+        textAlign: 'center',
+    },
+    reportTableRow: {
+        flexDirection: 'row',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+        alignItems: 'center',
+    },
+    reportTableCell: {
+        flex: 1,
+        fontSize: 12,
+        color: COLORS.textDark,
+        textAlign: 'center',
+    },
+    noHistoryBox: {
+        padding: 24,
+        alignItems: 'center',
+        backgroundColor: '#F9FAFB',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        marginBottom: 16,
+    },
+    reportFooterAdmin: {
+        paddingVertical: 12,
+        alignItems: 'center',
+        borderTopWidth: 1,
+        borderTopColor: '#F3F4F6',
+        marginBottom: 16,
+    },
+    reportFooterTextAdmin: {
+        fontSize: 11,
+        color: COLORS.textMuted,
+    },
+    viewSectionTabs: {
+        flexDirection: 'row',
+        backgroundColor: '#F3F4F6',
+        marginHorizontal: 0,
+        marginBottom: 16,
+        borderRadius: 10,
+        padding: 4,
+    },
+    viewSectionBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        height: 44,
+        borderRadius: 8,
+        gap: 6,
+    },
+    viewSectionBtnActive: {
+        backgroundColor: '#FFFFFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    viewSectionBtnText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: COLORS.textMuted,
+    },
+    viewSectionBtnTextActive: {
+        color: COLORS.primary,
+        fontWeight: '700',
+    },
+    analyticsMainContainer: {
+        paddingBottom: 24,
+    },
+    vendorPickerBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        height: 42,
+        marginBottom: 10,
+    },
+    vendorFilterPicker: {
+        height: 40,
+        backgroundColor: 'transparent',
+        borderWidth: 0,
+        fontSize: 13,
+        color: COLORS.textDark,
+    },
+    analyticsControlRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 14,
+        gap: 10,
+    },
+    adminPdfBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#1E293B',
+        paddingHorizontal: 14,
+        height: 42,
+        borderRadius: 8,
+        gap: 6,
+        flexShrink: 0,
+    },
+    adminPdfBtnText: {
+        color: '#FFFFFF',
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    analyticsKpiGrid: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 14,
+    },
+    analyticsKpiCard: {
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 10,
+        padding: 10,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        alignItems: 'center',
+    },
+    analyticsKpiValue: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: COLORS.textDark,
+    },
+    analyticsKpiLabel: {
+        fontSize: 11,
+        color: COLORS.textMuted,
+        marginTop: 2,
+    },
+    analyticsTableWrapper: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+        elevation: 1,
+    },
+    analyticsTableHeaderBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        backgroundColor: '#F9FAFB',
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.border,
+    },
+    analyticsTableHeaderTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: COLORS.textDark,
+    },
+    analyticsReloadBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        borderRadius: 6,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
+    analyticsReloadBtnText: {
+        fontSize: 11,
+        color: COLORS.textMuted,
+        fontWeight: '500',
+    },
+    adminTableHeaderRow: {
+        flexDirection: 'row',
+        backgroundColor: '#F3F4F6',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.border,
+    },
+    adminTableHeaderCell: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: '#4B5563',
+        textAlign: 'center',
+    },
+    adminTableDataRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+    },
+    adminTableDataCell: {
+        fontSize: 12,
+        color: COLORS.textDark,
+        textAlign: 'center',
+    },
+    adminTableTitle: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: COLORS.textDark,
+    },
+    adminTableSub: {
+        fontSize: 10,
+        color: COLORS.textMuted,
+        marginTop: 1,
+    },
+    adminTableVendorText: {
+        fontSize: 11,
+        fontWeight: '500',
+        color: '#374151',
+    },
+    typeBadgeAdmin: {
+        fontSize: 10,
+        fontWeight: '700',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 10,
+        overflow: 'hidden',
+    },
+    typeBadgeNotificationAdmin: {
+        backgroundColor: '#FEE2E2',
+        color: '#991B1B',
+    },
+    typeBadgeFeaturedAdmin: {
+        backgroundColor: '#EFF6FF',
+        color: '#1D4ED8',
+    },
+    statusBadgePillAdmin: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 10,
+    },
+    statusBadgeTextAdmin: {
+        fontSize: 10,
+        fontWeight: '700',
+    },
+    statusApprovedAdmin: {
+        backgroundColor: '#D1FAE5',
+    },
+    statusDisapprovedAdmin: {
+        backgroundColor: '#FEE2E2',
+    },
+    statusPendingAdmin: {
+        backgroundColor: '#FEF3C7',
+    },
+    adminTableActionBtn: {
+        width: 28,
+        height: 28,
+        borderRadius: 6,
+        backgroundColor: '#FFF5EB',
+        borderWidth: 1,
+        borderColor: '#FED7AA',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 });

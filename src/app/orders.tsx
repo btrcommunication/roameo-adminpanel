@@ -98,6 +98,7 @@ const formatDate = (iso: string) => {
 export default function OrdersScreen() {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('All Orders');
+  const [selectedVendor, setSelectedVendor] = useState<string>('all');
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,20 +144,47 @@ export default function OrdersScreen() {
     fetchOrders();
   };
 
-  // ---- DERIVED ----
+  // ---- DERIVED VENDORS & STATS ----
+  const vendorsList = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number }>();
+    orders.forEach((o: any) => {
+      if (o.vendor_name) {
+        const key = String(o.vendor_id || o.vendor_name);
+        const current = map.get(key);
+        if (current) {
+          current.count += 1;
+        } else {
+          map.set(key, { id: key, name: o.vendor_name, count: 1 });
+        }
+      }
+    });
+    return Array.from(map.values());
+  }, [orders]);
+
+  const vendorOrders = useMemo(() => {
+    if (selectedVendor === 'all') return orders;
+    return orders.filter(
+      (o: any) => String(o.vendor_id || o.vendor_name) === String(selectedVendor)
+    );
+  }, [orders, selectedVendor]);
+
   const stats = useMemo(
     () => ({
-      total: orders.length,
-      placed: orders.filter((o) => o.status === 'placed').length,
-      paid: orders.filter((o) => o.payment_status === 'paid').length,
-      pending: orders.filter((o) => o.payment_status === 'pending').length,
-      cancelled: orders.filter((o) => o.status === 'cancelled').length,
+      total: vendorOrders.length,
+      placed: vendorOrders.filter((o) => o.status === 'placed').length,
+      paid: vendorOrders.filter((o) => o.payment_status === 'paid').length,
+      pending: vendorOrders.filter((o) => o.payment_status === 'pending').length,
+      cancelled: vendorOrders.filter((o) => o.status === 'cancelled').length,
+      totalGross: vendorOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0),
+      paidGross: vendorOrders
+        .filter((o) => o.payment_status === 'paid')
+        .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0),
     }),
-    [orders]
+    [vendorOrders]
   );
 
   const filteredOrders = useMemo(() => {
-    let list = orders;
+    let list = vendorOrders;
 
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -175,7 +203,7 @@ export default function OrdersScreen() {
     if (activeTab === 'Cancelled') list = list.filter((o) => o.status === 'cancelled');
 
     return list;
-  }, [orders, search, activeTab]);
+  }, [vendorOrders, search, activeTab]);
 
   const handleViewOrder = (order: Order) => {
     setSelectedOrder(order);
@@ -210,10 +238,52 @@ export default function OrdersScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }>
-        <Text style={styles.pageTitle}>Orders</Text>
+        <Text style={styles.pageTitle}>Orders & Revenue</Text>
         <Text style={styles.pageSubtitle}>
-          Monitor and manage all platform orders.
+          Monitor and manage platform orders and vendor revenue.
         </Text>
+
+        {/* Vendor Filter Selector */}
+        {vendorsList.length > 0 && (
+          <View style={{ marginBottom: 14 }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.textDark, marginBottom: 8 }}>
+              🏢 Filter by Vendor:
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => setSelectedVendor('all')}
+                style={[
+                  styles.tabButton,
+                  selectedVendor === 'all' && { backgroundColor: '#111827', borderColor: '#111827' },
+                ]}>
+                <Text
+                  style={[
+                    styles.tabButtonText,
+                    selectedVendor === 'all' && { color: '#FFF', fontWeight: '600' },
+                  ]}>
+                  All Vendors ({orders.length})
+                </Text>
+              </TouchableOpacity>
+              {vendorsList.map((v) => (
+                <TouchableOpacity
+                  key={v.id}
+                  onPress={() => setSelectedVendor(v.id)}
+                  style={[
+                    styles.tabButton,
+                    selectedVendor === v.id && { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.tabButtonText,
+                      selectedVendor === v.id && { color: '#FFF', fontWeight: '600' },
+                    ]}>
+                    {v.name} ({v.count})
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         <ScrollView
           horizontal
@@ -243,9 +313,18 @@ export default function OrdersScreen() {
         </ScrollView>
 
         <View style={styles.statsRow}>
-          <Text style={styles.statsTitle}>Orders</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <Text style={styles.statsTitle}>
+              {selectedVendor === 'all'
+                ? 'Total Revenue (All Vendors)'
+                : `Revenue: ${vendorsList.find((v) => v.id === selectedVendor)?.name || 'Vendor'}`}
+            </Text>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.greenSuccess }}>
+              R{stats.totalGross.toFixed(2)}
+            </Text>
+          </View>
           <View style={styles.statsValues}>
-            <Stat label="All" value={stats.total} />
+            <Stat label="Orders" value={stats.total} />
             <Stat label="Placed" value={stats.placed} color={COLORS.blueInfo} />
             <Stat label="Paid" value={stats.paid} color={COLORS.greenSuccess} />
             <Stat label="Pending" value={stats.pending} color={COLORS.yellowPending} />
