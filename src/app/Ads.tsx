@@ -344,13 +344,25 @@ export default function AdsManagement() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ start_date: startDate, end_date: endDate })
             });
+            const data = await response.json().catch(() => null);
+            console.log('[Admin Ad Approve] API response:', data);
+
             if (response.ok) {
-                Alert.alert('Success', 'Ad Approved!');
+                if (data?.push_notification) {
+                    if (data.push_notification.broadcast) {
+                        Alert.alert('Success', `Ad Approved! Push notification broadcast to ${data.push_notification.successCount || 0} device(s).`);
+                    } else {
+                        Alert.alert('Success', `Ad Approved!\nPush notice: ${data.push_notification.reason || data.push_notification.error || '0 devices registered'}`);
+                    }
+                } else {
+                    Alert.alert('Success', 'Ad Approved!');
+                }
                 fetchAds();
             } else {
-                Alert.alert('Error', 'Failed to approve');
+                Alert.alert('Error', data?.message || 'Failed to approve');
             }
         } catch (e) {
+            console.error('[Admin Ad Approve Error]:', e);
             Alert.alert('Error', 'Failed to approve');
         } finally {
             setSubmitting(false);
