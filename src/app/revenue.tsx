@@ -204,7 +204,8 @@ export default function AdminRevenueScreen() {
                             <Text style={{ fontSize: 13, color: COLORS.textDark, flex: 1 }} numberOfLines={1}>
                                 {selectedVendorFilter === 'all'
                                     ? '🏢 All Vendors (Platform Wide)'
-                                    : (vendors.find(v => String(v.id) === selectedVendorFilter)?.business_name ||
+                                    : (vendors.find(v => String(v.id) === selectedVendorFilter)?.name ||
+                                        vendors.find(v => String(v.id) === selectedVendorFilter)?.business_name ||
                                         vendors.find(v => String(v.id) === selectedVendorFilter)?.owner_name ||
                                         `Vendor #${selectedVendorFilter}`)}
                             </Text>
@@ -225,7 +226,7 @@ export default function AdminRevenueScreen() {
                                         { id: 'all', label: '🏢 All Vendors (Platform Wide)' },
                                         ...vendors.map(v => ({
                                             id: String(v.id),
-                                            label: v.business_name || v.owner_name || `Vendor #${v.id}`
+                                            label: v.name || v.business_name || v.owner_name || `Vendor #${v.id}`
                                         }))
                                     ].map((opt) => (
                                         <TouchableOpacity
@@ -471,7 +472,7 @@ export default function AdminRevenueScreen() {
                                     <Text style={{ marginHorizontal: 6, color: '#CBD5E1' }}>|</Text>
                                     <Ionicons name="business-outline" size={14} color="#64748B" style={{ marginRight: 4 }} />
                                     <Text style={styles.txCustomer} numberOfLines={1}>
-                                        {ord.vendor_name || `Vendor #${ord.vendor_id}`}
+                                        {ord.vendor_name || vendors.find(v => String(v.id) === String(ord.vendor_id))?.name || `Vendor #${ord.vendor_id}`}
                                     </Text>
                                 </View>
 

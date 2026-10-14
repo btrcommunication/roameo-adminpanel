@@ -129,7 +129,7 @@ export default function AdsManagement() {
         if (typeof window !== 'undefined') {
             const summary = data?.summary || {};
             const adsList = data?.ads || [];
-            const filterLabel = selectedVendorFilter === 'all' ? 'All Vendors (Platform-Wide)' : (vendors.find(v => String(v.id) === String(selectedVendorFilter))?.business_name || `Vendor #${selectedVendorFilter}`);
+            const filterLabel = selectedVendorFilter === 'all' ? 'All Vendors (Platform-Wide)' : (vendors.find(v => String(v.id) === String(selectedVendorFilter))?.name || vendors.find(v => String(v.id) === String(selectedVendorFilter))?.business_name || `Vendor #${selectedVendorFilter}`);
             const dateStr = new Date().toLocaleString();
 
             const rowsHtml = adsList.map((a, i) => `
@@ -1232,7 +1232,8 @@ export default function AdsManagement() {
                                     <Text style={{ fontSize: 13, color: COLORS.textDark, flex: 1 }} numberOfLines={1}>
                                         {selectedVendorFilter === 'all'
                                             ? '🏢 All Vendors (Platform Wide)'
-                                            : (vendors.find(v => String(v.id) === selectedVendorFilter)?.business_name ||
+                                            : (vendors.find(v => String(v.id) === selectedVendorFilter)?.name ||
+                                                vendors.find(v => String(v.id) === selectedVendorFilter)?.business_name ||
                                                 vendors.find(v => String(v.id) === selectedVendorFilter)?.owner_name ||
                                                 `Vendor #${selectedVendorFilter}`)}
                                     </Text>
@@ -1271,7 +1272,7 @@ export default function AdsManagement() {
                                                 { id: 'all', label: '🏢 All Vendors (Platform Wide)' },
                                                 ...vendors.map(v => ({
                                                     id: String(v.id),
-                                                    label: v.business_name || v.owner_name || `Vendor #${v.id}`
+                                                    label: v.name || v.business_name || v.owner_name || `Vendor #${v.id}`
                                                 }))
                                             ].map((opt) => (
                                                 <TouchableOpacity

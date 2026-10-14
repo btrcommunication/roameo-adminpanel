@@ -33,7 +33,9 @@ interface Order {
   id: string;
   user_id: number;
   customer: string;
+  customer_name?: string | null;
   customer_email?: string | null;
+  vendor_id?: number | string | null;
   vendor_name?: string | null;
   items: OrderLineItem[];
   total_items: number;
@@ -101,6 +103,7 @@ export default function OrdersScreen() {
   const [selectedVendor, setSelectedVendor] = useState<string>('all');
 
   const [orders, setOrders] = useState<Order[]>([]);
+  const [vendors, setVendors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +114,18 @@ export default function OrdersScreen() {
   const [actionsModalVisible, setActionsModalVisible] = useState(false);
   const [selectedOrderForActions, setSelectedOrderForActions] =
     useState<Order | null>(null);
+
+  const fetchVendors = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/vendorcreation`);
+      const json = await res.json();
+      if (json?.status === 'success' && Array.isArray(json?.data)) {
+        setVendors(json.data);
+      }
+    } catch (e) {
+      console.error('Failed to load vendors for orders:', e);
+    }
+  }, []);
 
   // ---- FETCH ALL ORDERS (no auth) ----
   const fetchOrders = useCallback(async () => {
@@ -137,34 +152,39 @@ export default function OrdersScreen() {
 
   useEffect(() => {
     fetchOrders();
-  }, [fetchOrders]);
+    fetchVendors();
+  }, [fetchOrders, fetchVendors]);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchOrders();
+    fetchVendors();
   };
 
   // ---- DERIVED VENDORS & STATS ----
   const vendorsList = useMemo(() => {
     const map = new Map<string, { id: string; name: string; count: number }>();
     orders.forEach((o: any) => {
-      if (o.vendor_name) {
-        const key = String(o.vendor_id || o.vendor_name);
+      const vId = o.vendor_id ? String(o.vendor_id) : '';
+      const vendorObj = vendors.find((v) => String(v.id) === vId);
+      const name = o.vendor_name || vendorObj?.name || vendorObj?.business_name || (vId ? `Vendor #${vId}` : '');
+      const key = vId || name;
+      if (key) {
         const current = map.get(key);
         if (current) {
           current.count += 1;
         } else {
-          map.set(key, { id: key, name: o.vendor_name, count: 1 });
+          map.set(key, { id: key, name: name || key, count: 1 });
         }
       }
     });
     return Array.from(map.values());
-  }, [orders]);
+  }, [orders, vendors]);
 
   const vendorOrders = useMemo(() => {
     if (selectedVendor === 'all') return orders;
     return orders.filter(
-      (o: any) => String(o.vendor_id || o.vendor_name) === String(selectedVendor)
+      (o: any) => String(o.vendor_id || '') === String(selectedVendor) || String(o.vendor_name || '') === String(selectedVendor)
     );
   }, [orders, selectedVendor]);
 
@@ -317,7 +337,7 @@ export default function OrdersScreen() {
             <Text style={styles.statsTitle}>
               {selectedVendor === 'all'
                 ? 'Total Revenue (All Vendors)'
-                : `Revenue: ${vendorsList.find((v) => v.id === selectedVendor)?.name || 'Vendor'}`}
+                : `Revenue: ${vendorsList.find((v) => v.id === selectedVendor)?.name || vendors.find((v) => String(v.id) === selectedVendor)?.name || 'Vendor'}`}
             </Text>
             <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.greenSuccess }}>
               R{stats.totalGross.toFixed(2)}
@@ -403,7 +423,9 @@ export default function OrdersScreen() {
                   </View>
                   <View style={[styles.infoRow, { marginTop: 4 }]}>
                     <Ionicons name="storefront-outline" size={14} color={COLORS.textMuted} />
-                    <Text style={styles.infoText}>Vendor: {item.vendor_name || 'Unknown'}</Text>
+                    <Text style={styles.infoText}>
+                      Vendor: {item.vendor_name || vendors.find((v) => String(v.id) === String(item.vendor_id))?.name || (item.vendor_id ? `Vendor #${item.vendor_id}` : 'Unknown')}
+                    </Text>
                   </View>
 
                   <View style={styles.dateTimeRow}>
@@ -502,7 +524,7 @@ export default function OrdersScreen() {
                   <View style={styles.modalInfoRow}>
                     <Ionicons name="storefront-outline" size={16} color={COLORS.textMuted} />
                     <Text style={styles.modalInfoText}>
-                      Vendor: {selectedOrder.vendor_name || 'Unknown'}
+                      Vendor: {selectedOrder.vendor_name || vendors.find((v) => String(v.id) === String(selectedOrder.vendor_id))?.name || (selectedOrder.vendor_id ? `Vendor #${selectedOrder.vendor_id}` : 'Unknown')}
                     </Text>
                   </View>
 
