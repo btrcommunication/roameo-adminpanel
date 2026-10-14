@@ -488,7 +488,7 @@ export default function CategoryManagement() {
         </View>
 
         {/* Error Display */}
-        {error && (
+        {Boolean(error) && (
           <View style={styles.errorContainer}>
             <Ionicons name="alert-circle" size={24} color={COLORS.redError} />
             <Text style={styles.errorText}>{error}</Text>
@@ -560,7 +560,7 @@ export default function CategoryManagement() {
                 </Text>
               </TouchableOpacity>
 
-              {formData.image_url && (
+              {Boolean(formData.image_url) && (
                 <View style={styles.imagePreviewContainer}>
                   <Image
                     source={{ uri: formData.image_url }}
