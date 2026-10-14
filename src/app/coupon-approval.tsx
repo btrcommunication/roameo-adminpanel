@@ -483,13 +483,22 @@ export default function CouponApprovalScreen() {
                                 const isRejected = item.is_approved === 0 && item.is_active === 0;
                                 const isPending = item.is_approved === 0 && item.is_active === 1;
 
+                                const rawBanner = item.banner_image;
+                                const bannerUrl = rawBanner
+                                    ? (rawBanner.includes('roameomobileapp.braventra.in')
+                                        ? rawBanner.replace(/^https?:\/\/roameomobileapp\.braventra\.in/i, process.env.EXPO_PUBLIC_BASE_URL || '')
+                                        : rawBanner.startsWith('http')
+                                            ? rawBanner
+                                            : `${process.env.EXPO_PUBLIC_BASE_URL}/${rawBanner.replace(/^\/+/, '')}`)
+                                    : null;
+
                                 return (
                                     <View key={item.id} style={styles.couponTicketCard}>
                                         {/* Banner Image - only shown when URL exists */}
-                                        {!!item.banner_image && (
+                                        {!!bannerUrl && (
                                             <View style={styles.bannerWrapper}>
                                                 <Image
-                                                    source={{ uri: item.banner_image }}
+                                                    source={{ uri: bannerUrl }}
                                                     style={styles.bannerImage}
                                                     resizeMode="cover"
                                                 />
